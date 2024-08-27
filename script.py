@@ -8,6 +8,15 @@ excel_file = "C:/Users/USER/Downloads/1724684937-Demo-Sheet.xlsx"
 wb = openpyxl.load_workbook(excel_file)
 ws = wb.active
 
+# Create a new sheet called "Script" if it doesn't exist
+if "Script" not in wb.sheetnames:
+    script_ws = wb.create_sheet(title="Script")
+    # Add headers to the Script sheet
+    script_ws.cell(row=1, column=1).value = "PAN"
+    script_ws.cell(row=1, column=2).value = "Result"
+else:
+    script_ws = wb["Script"]
+
 # Anticaptcha API configuration
 ANTICAPTCHA_API_KEY = "your_api_key_here"
 client = AnticaptchaClient(ANTICAPTCHA_API_KEY)
@@ -58,18 +67,24 @@ def scrape_pan_data(pan_number, row):
         result_response = session.post(url, data=data, timeout=10)
         print("Sending request with PAN and captcha...")
 
+        # Write data into the Script sheet
+        script_row = row - 1  # Adjust the row number to match the active sheet rows
+
         # Parse the result (determine success or failure)
         if "No result found" in result_response.text:
-            ws.cell(row=row, column=2).value = "No result found"
+            script_ws.cell(row=script_row, column=1).value = pan_number
+            script_ws.cell(row=script_row, column=2).value = "No result found"
             print("No result found for PAN:", pan_number)
         else:
-            # Extract and enter data into the Excel sheet
+            # Extract and enter data into the Script sheet
             extracted_data = ""  # Parse result_response and extract relevant data
-            ws.cell(row=row, column=2).value = extracted_data
+            script_ws.cell(row=script_row, column=1).value = pan_number
+            script_ws.cell(row=script_row, column=2).value = extracted_data
             print("Data extracted for PAN:", pan_number)
 
     except Exception as e:
-        ws.cell(row=row, column=2).value = f"Error: {str(e)}"
+        script_ws.cell(row=script_row, column=1).value = pan_number
+        script_ws.cell(row=script_row, column=2).value = f"Error: {str(e)}"
         print("Error occurred for PAN:", pan_number, "-", str(e))
 
 
@@ -77,8 +92,8 @@ def scrape_pan_data(pan_number, row):
 def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
-        for row in range(2, ws.max_row + 1):
-            pan_number = ws.cell(row=row, column=3).value
+        for row in range(2, 6):
+            pan_number = ws.cell(row=row, column=2).value
             if pan_number is None or pan_number.strip() == "":
                 print(f"Skipping empty PAN in row {row}")
                 continue
@@ -87,7 +102,7 @@ def main():
 
         concurrent.futures.wait(futures)
 
-    # Save the Excel file after updating it
+    # Ensure that the data is written before saving the file
     wb.save(excel_file)
     print("Excel file saved.")
 
