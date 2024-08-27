@@ -12,8 +12,22 @@ ws = wb.active
 if "Script" not in wb.sheetnames:
     script_ws = wb.create_sheet(title="Script")
     # Add headers to the Script sheet
-    script_ws.cell(row=1, column=1).value = "PAN"
-    script_ws.cell(row=1, column=2).value = "Result"
+    headers = [
+        "PAN",
+        "GST Number",
+        "GST Status",
+        "Legal Name of Business",
+        "Trade Name",
+        "Effective Date of Registration",
+        "Constitution of Business",
+        "GSTIN / UIN Status",
+        "Taxpayer Type",
+        "Whether Aadhaar Authenticated?",
+        "Whether e-KYC Verified?",
+        "Financial Year 2024-2025",
+    ]
+    for i, header in enumerate(headers, start=1):
+        script_ws.cell(row=1, column=i).value = header
 else:
     script_ws = wb["Script"]
 
@@ -32,6 +46,37 @@ def solve_captcha(image_url):
     captcha_text = job.get_captcha_text()
     print("Captcha solved:", captcha_text)
     return captcha_text
+
+
+# Function to extract required data from the response
+def parse_gst_details(response_text):
+    # For demonstration, we'll use dummy data as placeholders for the parsed values.
+    # You'll need to replace these with actual parsing logic based on the HTML structure
+    gst_number = "22AAAAA0000A1Z5"  # Dummy GST Number
+    gst_status = "Active"
+    legal_name = "ABC Pvt. Ltd."
+    trade_name = "ABC Traders"
+    effective_date = "01/01/2021"
+    constitution = "Private Limited Company"
+    gstin_status = "Active"
+    taxpayer_type = "Regular"
+    aadhaar_auth = "Yes"
+    ekyc_verified = "Yes"
+    financial_year = "2024-2025"
+
+    return [
+        gst_number,
+        gst_status,
+        legal_name,
+        trade_name,
+        effective_date,
+        constitution,
+        gstin_status,
+        taxpayer_type,
+        aadhaar_auth,
+        ekyc_verified,
+        financial_year,
+    ]
 
 
 # Function to scrape data for a single PAN number
@@ -68,18 +113,19 @@ def scrape_pan_data(pan_number, row):
         print("Sending request with PAN and captcha...")
 
         # Write data into the Script sheet
-        script_row = row - 1  # Adjust the row number to match the active sheet rows
+        script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
 
-        # Parse the result (determine success or failure)
+        # Parse the result and extract relevant data
+        script_ws.cell(row=script_row, column=1).value = pan_number
         if "No result found" in result_response.text:
-            script_ws.cell(row=script_row, column=1).value = pan_number
             script_ws.cell(row=script_row, column=2).value = "No result found"
             print("No result found for PAN:", pan_number)
         else:
             # Extract and enter data into the Script sheet
-            extracted_data = ""  # Parse result_response and extract relevant data
+            parsed_data = parse_gst_details(result_response.text)
             script_ws.cell(row=script_row, column=1).value = pan_number
-            script_ws.cell(row=script_row, column=2).value = extracted_data
+            for i, data in enumerate(parsed_data, start=2):
+                script_ws.cell(row=script_row, column=i).value = data
             print("Data extracted for PAN:", pan_number)
 
     except Exception as e:
@@ -92,7 +138,7 @@ def scrape_pan_data(pan_number, row):
 def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
-        for row in range(2, 6):
+        for row in range(2, 8):
             pan_number = ws.cell(row=row, column=2).value
             if pan_number is None or pan_number.strip() == "":
                 print(f"Skipping empty PAN in row {row}")
