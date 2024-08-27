@@ -78,7 +78,7 @@ def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
         for row in range(2, ws.max_row + 1):
-            pan_number = ws.cell(row=row, column=1).value
+            pan_number = ws.cell(row=row, column=3).value
             if pan_number is None or pan_number.strip() == "":
                 print(f"Skipping empty PAN in row {row}")
                 continue
