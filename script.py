@@ -4,7 +4,8 @@ from python_anticaptcha import AnticaptchaClient, ImageToTextTask
 import concurrent.futures
 
 # Load the Excel file and read PAN numbers
-excel_file = "C:/Users/USER/Downloads/1724684937-Demo-Sheet.xlsx"
+# excel_file = "C:/Users/USER/Downloads/1724684937-Demo-Sheet.xlsx"
+excel_file = "/mnt/c/Users/User/downloads/1724684937-Demo-Sheet.xlsx"
 wb = openpyxl.load_workbook(excel_file)
 ws = wb.active
 
@@ -37,14 +38,23 @@ client = AnticaptchaClient(ANTICAPTCHA_API_KEY)
 
 # Function to solve captcha
 def solve_captcha(image_url):
-    print("Solving captcha...")
-    image_response = requests.get(image_url)
-    task = ImageToTextTask(image_response.content)
-    job = client.createTask(task)
-    job.join()
-    captcha_text = job.get_captcha_text()
-    print("Captcha solved:", captcha_text)
-    return captcha_text
+    try:
+        print("Fetching captcha image...")
+        image_response = requests.get(image_url)
+        if image_response.status_code == 200:
+            print("Captcha image fetched successfully, solving...")
+            task = ImageToTextTask(image_response.content)
+            job = client.createTask(task)
+            job.join()
+            captcha_text = job.get_captcha_text()
+            print("Captcha solved:", captcha_text)
+            return captcha_text
+        else:
+            print(f"Failed to fetch captcha image: Status {image_response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error during captcha solving: {str(e)}")
+        return None
 
 
 # Function to extract required data from the response
