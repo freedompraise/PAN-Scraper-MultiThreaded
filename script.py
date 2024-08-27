@@ -11,7 +11,6 @@ ws = wb.active
 # Create a new sheet called "Script" if it doesn't exist
 if "Script" not in wb.sheetnames:
     script_ws = wb.create_sheet(title="Script")
-    # Add headers to the Script sheet
     headers = [
         "PAN",
         "GST Number",
@@ -50,8 +49,6 @@ def solve_captcha(image_url):
 
 # Function to extract required data from the response
 def parse_gst_details(response_text):
-    # For demonstration, we'll use dummy data as placeholders for the parsed values.
-    # You'll need to replace these with actual parsing logic based on the HTML structure
     gst_number = "22AAAAA0000A1Z5"  # Dummy GST Number
     gst_status = "Active"
     legal_name = "ABC Pvt. Ltd."
@@ -81,6 +78,11 @@ def parse_gst_details(response_text):
 
 # Function to scrape data for a single PAN number
 def scrape_pan_data(pan_number, row):
+    script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
+    script_ws.cell(row=script_row, column=1).value = (
+        pan_number  # Always write the PAN number
+    )
+
     try:
         # Convert PAN number to string for validation
         pan_number = str(pan_number)
@@ -112,24 +114,17 @@ def scrape_pan_data(pan_number, row):
         result_response = session.post(url, data=data, timeout=10)
         print("Sending request with PAN and captcha...")
 
-        # Write data into the Script sheet
-        script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
-
         # Parse the result and extract relevant data
-        script_ws.cell(row=script_row, column=1).value = pan_number
         if "No result found" in result_response.text:
             script_ws.cell(row=script_row, column=2).value = "No result found"
             print("No result found for PAN:", pan_number)
         else:
-            # Extract and enter data into the Script sheet
             parsed_data = parse_gst_details(result_response.text)
-            script_ws.cell(row=script_row, column=1).value = pan_number
             for i, data in enumerate(parsed_data, start=2):
                 script_ws.cell(row=script_row, column=i).value = data
             print("Data extracted for PAN:", pan_number)
 
     except Exception as e:
-        script_ws.cell(row=script_row, column=1).value = pan_number
         script_ws.cell(row=script_row, column=2).value = f"Error: {str(e)}"
         print("Error occurred for PAN:", pan_number, "-", str(e))
 
