@@ -2,9 +2,9 @@ import requests
 import openpyxl
 from python_anticaptcha import AnticaptchaClient, ImageToTextTask
 import concurrent.futures
+import time
 
 # Load the Excel file and read PAN numbers
-# excel_file = "C:/Users/USER/Downloads/1724684937-Demo-Sheet.xlsx"
 excel_file = "/mnt/c/Users/User/downloads/1724684937-Demo-Sheet.xlsx"
 wb = openpyxl.load_workbook(excel_file)
 ws = wb.active
@@ -37,24 +37,14 @@ client = AnticaptchaClient(ANTICAPTCHA_API_KEY)
 
 
 # Function to solve captcha
-def solve_captcha(image_url):
-    try:
-        print("Fetching captcha image...")
-        image_response = requests.get(image_url)
-        if image_response.status_code == 200:
-            print("Captcha image fetched successfully, solving...")
-            task = ImageToTextTask(image_response.content)
-            job = client.createTask(task)
-            job.join()
-            captcha_text = job.get_captcha_text()
-            print("Captcha solved:", captcha_text)
-            return captcha_text
-        else:
-            print(f"Failed to fetch captcha image: Status {image_response.status_code}")
-            return None
-    except Exception as e:
-        print(f"Error during captcha solving: {str(e)}")
-        return None
+def solve_captcha(image_content):
+    print("Solving captcha...")
+    task = ImageToTextTask(image_content)
+    job = client.createTask(task)
+    job.join()
+    captcha_text = job.get_captcha_text()
+    print("Captcha solved:", captcha_text)
+    return captcha_text
 
 
 # Function to extract required data from the response
@@ -89,50 +79,45 @@ def parse_gst_details(response_text):
 # Function to scrape data for a single PAN number
 def scrape_pan_data(pan_number, row):
     script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
-    script_ws.cell(row=script_row, column=1).value = (
-        pan_number  # Always write the PAN number
-    )
+    script_ws.cell(row=script_row, column=1).value = pan_number
 
     try:
-        # Convert PAN number to string for validation
-        pan_number = str(pan_number)
-
-        if pan_number.strip() == "":
+        pan_number = str(pan_number).strip()
+        if pan_number == "":
             print(f"Skipping empty PAN in row {row}")
             return
 
-        url = "https://services.gst.gov.in/services/searchtpbypan"
-
-        # Make a request to get the captcha image and form data
         session = requests.Session()
-        response = session.get(url, timeout=10)
-        print("Requesting captcha image and form data...")
+        headers = {"User-Agent": "Your User Agent Here"}
 
-        # Extract captcha URL and other necessary form data from the response
-        captcha_url = ""  # Extract captcha image URL from response
-        print("Captcha URL:", captcha_url)
-        captcha_text = solve_captcha(captcha_url)
+        url = "https://services.gst.gov.in/services/api/get/gstndtls"
+        captcha_request = session.get(
+            "https://services.gst.gov.in/services/captcha", headers=headers
+        )
+        if captcha_request.status_code == 200:
+            print("Captcha image received")
+            captcha_text = solve_captcha(captcha_request.content)
 
-        # Prepare form data
-        data = {
-            "pan": pan_number,
-            "captcha": captcha_text,
-            # Add other necessary fields here
-        }
+            data = {
+                "panNO": pan_number,
+                "captcha": captcha_text,
+            }
 
-        # Send the request with PAN and captcha
-        result_response = session.post(url, data=data, timeout=10)
-        print("Sending request with PAN and captcha...")
+            # Send the request with PAN and captcha
+            result_response = session.post(url, headers=headers, json=data, timeout=10)
+            print("Sending request with PAN and captcha...")
 
-        # Parse the result and extract relevant data
-        if "No result found" in result_response.text:
-            script_ws.cell(row=script_row, column=2).value = "No result found"
-            print("No result found for PAN:", pan_number)
+            if "No result found" in result_response.text:
+                script_ws.cell(row=script_row, column=2).value = "No result found"
+                print("No result found for PAN:", pan_number)
+            else:
+                parsed_data = parse_gst_details(result_response.text)
+                for i, data in enumerate(parsed_data, start=2):
+                    script_ws.cell(row=script_row, column=i).value = data
+                print("Data extracted for PAN:", pan_number)
+
         else:
-            parsed_data = parse_gst_details(result_response.text)
-            for i, data in enumerate(parsed_data, start=2):
-                script_ws.cell(row=script_row, column=i).value = data
-            print("Data extracted for PAN:", pan_number)
+            print(f"Error in retrieving captcha for PAN: {pan_number}")
 
     except Exception as e:
         script_ws.cell(row=script_row, column=2).value = f"Error: {str(e)}"
@@ -153,7 +138,6 @@ def main():
 
         concurrent.futures.wait(futures)
 
-    # Ensure that the data is written before saving the file
     wb.save(excel_file)
     print("Excel file saved.")
 
