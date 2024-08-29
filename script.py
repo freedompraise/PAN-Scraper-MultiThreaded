@@ -3,6 +3,7 @@ import openpyxl
 from python_anticaptcha import AnticaptchaClient, ImageToTextTask
 import concurrent.futures
 import time
+from requests.exceptions import RequestException
 
 # Load the Excel file and read PAN numbers
 excel_file = "/mnt/c/Users/User/downloads/1724684937-Demo-Sheet.xlsx"
@@ -47,9 +48,9 @@ def solve_captcha(image_content):
     return captcha_text
 
 
-# Function to extract required data from the response
 def parse_gst_details(response_text):
-    gst_number = "22AAAAA0000A1Z5"  # Dummy GST Number
+    # Dummy data for demonstration purposes
+    gst_number = "22AAAAA0000A1Z5"
     gst_status = "Active"
     legal_name = "ABC Pvt. Ltd."
     trade_name = "ABC Traders"
@@ -76,22 +77,21 @@ def parse_gst_details(response_text):
     ]
 
 
-# Your existing main function...
 def scrape_pan_data(pan_number, row, retries=3):
-    script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
+    script_row = row - 1
     script_ws.cell(row=script_row, column=1).value = pan_number
 
     for attempt in range(retries):
         try:
             pan_number = str(pan_number).strip()
-            if pan_number == "":
+            if not pan_number:
                 print(f"Skipping empty PAN in row {row}")
                 return
 
             session = requests.Session()
             headers = {"User-Agent": "Your User Agent Here"}
 
-            url = "https://services.gst.gov.in/services/api/get/gstndtls"
+            # Request captcha image
             captcha_request = session.get(
                 "https://services.gst.gov.in/services/captcha", headers=headers
             )
@@ -106,7 +106,10 @@ def scrape_pan_data(pan_number, row, retries=3):
 
                 # Send the request with PAN and captcha
                 result_response = session.post(
-                    url, headers=headers, json=data, timeout=10
+                    "https://services.gst.gov.in/services/api/get/gstndtls",
+                    headers=headers,
+                    json=data,
+                    timeout=10,
                 )
                 print("Sending request with PAN and captcha...")
 
@@ -118,31 +121,29 @@ def scrape_pan_data(pan_number, row, retries=3):
                     for i, data in enumerate(parsed_data, start=2):
                         script_ws.cell(row=script_row, column=i).value = data
                     print("Data extracted for PAN:", pan_number)
-                break  # Exit the loop if successful
+                break
 
             else:
                 print(f"Error in retrieving captcha for PAN: {pan_number}")
-                time.sleep(5)  # Wait before retrying
+                time.sleep(5)
 
         except RequestException as e:
             print(
                 f"Attempt {attempt + 1} failed for PAN: {pan_number}, error: {str(e)}"
             )
-            time.sleep(5)  # Wait before retrying
+            time.sleep(5)
 
     else:
-        # If all retries fail, log the error
-        script_ws.cell(row=script_row, column=2).value = f"Error: Max retries exceeded"
+        script_ws.cell(row=script_row, column=2).value = "Error: Max retries exceeded"
         print(f"Max retries exceeded for PAN: {pan_number}")
 
 
-# Use concurrent.futures to handle multiple scraping sessions simultaneously
 def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
         for row in range(2, 8):
             pan_number = ws.cell(row=row, column=2).value
-            if pan_number is None or pan_number.strip() == "":
+            if not pan_number or pan_number.strip() == "":
                 print(f"Skipping empty PAN in row {row}")
                 continue
             print("Scraping data for PAN:", pan_number)
