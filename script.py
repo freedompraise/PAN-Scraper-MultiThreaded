@@ -76,52 +76,64 @@ def parse_gst_details(response_text):
     ]
 
 
-# Function to scrape data for a single PAN number
-def scrape_pan_data(pan_number, row):
+# Your existing main function...
+def scrape_pan_data(pan_number, row, retries=3):
     script_row = row - 1  # Adjust the row number to match the "Script" sheet rows
     script_ws.cell(row=script_row, column=1).value = pan_number
 
-    try:
-        pan_number = str(pan_number).strip()
-        if pan_number == "":
-            print(f"Skipping empty PAN in row {row}")
-            return
+    for attempt in range(retries):
+        try:
+            pan_number = str(pan_number).strip()
+            if pan_number == "":
+                print(f"Skipping empty PAN in row {row}")
+                return
 
-        session = requests.Session()
-        headers = {"User-Agent": "Your User Agent Here"}
+            session = requests.Session()
+            headers = {"User-Agent": "Your User Agent Here"}
 
-        url = "https://services.gst.gov.in/services/api/get/gstndtls"
-        captcha_request = session.get(
-            "https://services.gst.gov.in/services/captcha", headers=headers
-        )
-        if captcha_request.status_code == 200:
-            print("Captcha image received")
-            captcha_text = solve_captcha(captcha_request.content)
+            url = "https://services.gst.gov.in/services/api/get/gstndtls"
+            captcha_request = session.get(
+                "https://services.gst.gov.in/services/captcha", headers=headers
+            )
+            if captcha_request.status_code == 200:
+                print("Captcha image received")
+                captcha_text = solve_captcha(captcha_request.content)
 
-            data = {
-                "panNO": pan_number,
-                "captcha": captcha_text,
-            }
+                data = {
+                    "panNO": pan_number,
+                    "captcha": captcha_text,
+                }
 
-            # Send the request with PAN and captcha
-            result_response = session.post(url, headers=headers, json=data, timeout=10)
-            print("Sending request with PAN and captcha...")
+                # Send the request with PAN and captcha
+                result_response = session.post(
+                    url, headers=headers, json=data, timeout=10
+                )
+                print("Sending request with PAN and captcha...")
 
-            if "No result found" in result_response.text:
-                script_ws.cell(row=script_row, column=2).value = "No result found"
-                print("No result found for PAN:", pan_number)
+                if "No result found" in result_response.text:
+                    script_ws.cell(row=script_row, column=2).value = "No result found"
+                    print("No result found for PAN:", pan_number)
+                else:
+                    parsed_data = parse_gst_details(result_response.text)
+                    for i, data in enumerate(parsed_data, start=2):
+                        script_ws.cell(row=script_row, column=i).value = data
+                    print("Data extracted for PAN:", pan_number)
+                break  # Exit the loop if successful
+
             else:
-                parsed_data = parse_gst_details(result_response.text)
-                for i, data in enumerate(parsed_data, start=2):
-                    script_ws.cell(row=script_row, column=i).value = data
-                print("Data extracted for PAN:", pan_number)
+                print(f"Error in retrieving captcha for PAN: {pan_number}")
+                time.sleep(5)  # Wait before retrying
 
-        else:
-            print(f"Error in retrieving captcha for PAN: {pan_number}")
+        except RequestException as e:
+            print(
+                f"Attempt {attempt + 1} failed for PAN: {pan_number}, error: {str(e)}"
+            )
+            time.sleep(5)  # Wait before retrying
 
-    except Exception as e:
-        script_ws.cell(row=script_row, column=2).value = f"Error: {str(e)}"
-        print("Error occurred for PAN:", pan_number, "-", str(e))
+    else:
+        # If all retries fail, log the error
+        script_ws.cell(row=script_row, column=2).value = f"Error: Max retries exceeded"
+        print(f"Max retries exceeded for PAN: {pan_number}")
 
 
 # Use concurrent.futures to handle multiple scraping sessions simultaneously
